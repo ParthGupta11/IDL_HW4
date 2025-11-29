@@ -1,15 +1,15 @@
 from typing import Literal, List, Dict
 from tokenizers import Tokenizer, decoders, processors
 
-'''
+"""
 Specification:
-You will be splitting each text transcript into tokenized text, which will then serve as inputs to your model. 
-Additionally, you will need a method to convert the tokenized text back to its original form during inference or generation. 
-Character-level tokenization is straightforward, while subword tokenization involves splitting a word into subwords rather than characters. 
-The specific algorithm used for subword tokenization is [Byte Pair Encoding (BPE)](https://arxiv.org/pdf/1508.07909). 
+You will be splitting each text transcript into tokenized text, which will then serve as inputs to your model.
+Additionally, you will need a method to convert the tokenized text back to its original form during inference or generation.
+Character-level tokenization is straightforward, while subword tokenization involves splitting a word into subwords rather than characters.
+The specific algorithm used for subword tokenization is [Byte Pair Encoding (BPE)](https://arxiv.org/pdf/1508.07909).
 Part of the assignment will involve exploring these different tokenization strategies to assess their impact on your model's performance.
 
-The H4Tokenizer class provides tokenization functionality for the homework. 
+The H4Tokenizer class provides tokenization functionality for the homework.
 
 
 1. Tokenizer Types:
@@ -42,7 +42,8 @@ Usage:
 - Used by LMDataset and ASRDataset to process text data
 - Ensures consistent tokenization across training/validation
 - Handles special token addition and sequence conversion
-'''
+"""
+
 
 class H4Tokenizer:
     """
@@ -60,9 +61,14 @@ class H4Tokenizer:
         blank_id (int): ID for blank token '[BLANK]'
     """
 
-    VALID_TYPES = ['char', '1k', '5k', '10k']
+    VALID_TYPES = ["char", "1k", "5k", "10k"]
 
-    def __init__(self, token_map: Dict[str, str], token_type: Literal['char', '1k', '5k', '10k']='char', validate: bool=True):
+    def __init__(
+        self,
+        token_map: Dict[str, str],
+        token_type: Literal["char", "1k", "5k", "10k"] = "char",
+        validate: bool = True,
+    ):
         """
         Initialize tokenizer from pre-trained file.
 
@@ -70,7 +76,7 @@ class H4Tokenizer:
             token_map: Maps token types to tokenizer file paths
             token_type: Type of tokenizer to load
             validate: Whether to validate the tokenizer
-        
+
         Raises:
             ValueError: If invalid token_type provided
         """
@@ -81,7 +87,7 @@ class H4Tokenizer:
         self.tokenizer = Tokenizer.from_file(token_map[token_type])
 
         # Configure decoder based on tokenizer type
-        if token_type != 'char':
+        if token_type != "char":
             self.tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
             self.tokenizer.decoder = decoders.ByteLevel()
         else:
@@ -91,14 +97,14 @@ class H4Tokenizer:
         self.vocab_size = self.tokenizer.get_vocab_size()
 
         # Load special token IDs
-        self.pad_id   = self.tokenizer.token_to_id("[PAD]")
-        self.unk_id   = self.tokenizer.token_to_id("[UNK]") 
-        self.mask_id  = self.tokenizer.token_to_id("[MASK]")
-        self.sos_id   = self.tokenizer.token_to_id("[SOS]")
-        self.eos_id   = self.tokenizer.token_to_id("[EOS]")
+        self.pad_id = self.tokenizer.token_to_id("[PAD]")
+        self.unk_id = self.tokenizer.token_to_id("[UNK]")
+        self.mask_id = self.tokenizer.token_to_id("[MASK]")
+        self.sos_id = self.tokenizer.token_to_id("[SOS]")
+        self.eos_id = self.tokenizer.token_to_id("[EOS]")
         self.blank_id = self.tokenizer.token_to_id("[BLANK]")
 
-        if validate:    
+        if validate:
             self._validate_tokenizer()
 
     def tokenize(self, text: str) -> List[str]:
@@ -125,7 +131,7 @@ class H4Tokenizer:
         """
         return self.tokenizer.encode(text).ids
 
-    def decode(self, token_ids: List[int], skip_special_tokens: bool=False) -> str:
+    def decode(self, token_ids: List[int], skip_special_tokens: bool = False) -> str:
         """
         Convert token IDs back to text.
 
@@ -143,14 +149,14 @@ class H4Tokenizer:
         Prints diagnostic information and test results.
         """
         test_text = "[SOS]HI DEEP LEARNERS[EOS]"
-        tokens    = self.tokenize(test_text)
-        ids       = self.encode(test_text) 
-        decoded   = self.decode(ids)
+        tokens = self.tokenize(test_text)
+        ids = self.encode(test_text)
+        decoded = self.decode(ids)
 
-        print("="*80)
-        title = f"Tokenizer Configuration ({self.token_type})" 
+        print("=" * 80)
+        title = f"Tokenizer Configuration ({self.token_type})"
         print(f"{title:^80}")
-        print("-"*80)
+        print("-" * 80)
         print(f"{'Vocabulary size:':<20} {self.tokenizer.get_vocab_size()}")
         print("\nSpecial Tokens:")
         print(f"{'PAD:':<12} {self.pad_id:>6}")
@@ -160,14 +166,16 @@ class H4Tokenizer:
         print(f"{'EOS:':<12} {self.eos_id:>6}")
         print(f"{'BLANK:':<12} {self.blank_id:>6}")
         print("\nValidation Example:")
-        print("-"*80)
+        print("-" * 80)
         print(f"{'Input text:':<12} {test_text}")
         print(f"{'Tokens:':<12} {tokens}")
         print(f"{'Token IDs:':<12} {ids}")
         print(f"{'Decoded:':<12} {decoded}")
-        print("="*80)
+        print("=" * 80)
 
-    def get_avg_chars_per_token(self, token_ids: List[int], skip_special_tokens: bool = True) -> float:
+    def get_avg_chars_per_token(
+        self, token_ids: List[int], skip_special_tokens: bool = True
+    ) -> float:
         """
         Calculate average number of characters per token for given token IDs.
 
@@ -180,10 +188,20 @@ class H4Tokenizer:
         """
         decoded_text = self.decode(token_ids, skip_special_tokens=skip_special_tokens)
         if skip_special_tokens:
-            token_count = sum(1 for id in token_ids if id not in 
-                             [self.pad_id, self.unk_id, self.mask_id, 
-                              self.sos_id, self.eos_id, self.blank_id])
+            token_count = sum(
+                1
+                for id in token_ids
+                if id
+                not in [
+                    self.pad_id,
+                    self.unk_id,
+                    self.mask_id,
+                    self.sos_id,
+                    self.eos_id,
+                    self.blank_id,
+                ]
+            )
         else:
             token_count = len(token_ids)
-        
+
         return len(decoded_text) / token_count if token_count > 0 else 0
