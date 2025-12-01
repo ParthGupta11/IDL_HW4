@@ -179,14 +179,18 @@ class FeedForwardLayer(nn.Module):
 
         # TODO: Initialize the feed-forward network (use nn.Sequential)
         # See writeup for what layers to use
-        self.ffn = NotImplementedError
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_ff),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_ff, d_model)
+        )
 
         # TODO: Initialize the normalization layer
-        self.norm = NotImplementedError
+        self.norm = nn.LayerNorm(d_model)
 
         # TODO: Initialize the dropout layer
-        self.dropout = NotImplementedError
-        raise NotImplementedError # Remove once implemented
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         '''
@@ -201,8 +205,12 @@ class FeedForwardLayer(nn.Module):
 
         # NOTE: For some regularization you can apply dropout to the output of the feed-forward network before adding the residual connection
 
-        x = NotImplementedError
+        residual = x
+        x = self.norm(x)
+        x = self.ffn(x)
+        x = self.dropout(x)
+        x = x + residual
 
         # TODO: Return the output tensor
-        raise NotImplementedError # Remove once implemented
+        return x
 
