@@ -225,8 +225,86 @@ class SequenceGenerator:
         if self.max_length < x.size(1):
             raise ValueError("max_length must be >= input sequence length")
 
-        # TODO: Implement beam search
-        raise NotImplementedError # Remove once implemented
+        batch_size = x.size(0)
+        device = x.device
+
+        # Compute initial logits and probabilities
+        logits = self.score_fn(x)  # (batch_size, vocab_size)
+        logits = self._apply_repeat_penalty(logits, x, repeat_penalty)
+        logits = logits / temperature
+        log_probs = torch.log_softmax(logits, dim=-1)  # (batch_size, vocab_size)
+
+        # Select top beam_width tokens
+        top_log_probs, next_tokens = torch.topk(log_probs, k=beam_width, dim=-1)  # (batch_size, beam_width)
+        scores = top_log_probs  # (batch_size, beam_width)
+
+        # Expand input along beam dimension and append initial next tokens
+        sequences = x.unsqueeze(1).expand(batch_size, beam_width, x.size(1)).contiguous()  # (B, K, T)
+        sequences = torch.cat([sequences, next_tokens.unsqueeze(-1)], dim=-1)  # (B, K, T+1)
+
+        # Initialize finished flags where EOS encountered
+        eos_id = self.tokenizer.eos_id
+        finished = (next_tokens == eos_id)  # (B, K)
+
+        # Iterate until max_length
+        for _ in range(self.max_length - sequences.size(-1)):
+            if finished.all():
+                break
+
+            # Compute logits for next tokens per beam without flattening batch
+            # The provided score_fn expects input of shape (batch_size, seq_len)
+            next_token_scores_list: list = []
+            for k in range(beam_width):
+                logits_k = self.score_fn(sequences[:, k, :])  # (B, V)
+                next_token_scores_list.append(logits_k.unsqueeze(1))  # (B, 1, V)
+            next_token_scores = torch.cat(next_token_scores_list, dim=1)  # (B, K, V)
+
+            # Process logits
+            next_token_scores = self._apply_repeat_penalty(next_token_scores, sequences, repeat_penalty)
+            next_token_scores = next_token_scores / temperature
+            next_token_log_probs = torch.log_softmax(next_token_scores, dim=-1)  # (B, K, V)
+
+            # If a beam is finished, only allow EOS to be selected to carry score forward
+            if finished.any():
+                mask = finished.unsqueeze(-1)  # (B, K, 1)
+                # Set all logits to -inf except EOS which is 0 log-prob increment
+                neg_inf = torch.finfo(next_token_log_probs.dtype).min
+                eos_mask = torch.zeros_like(next_token_log_probs) + neg_inf
+                eos_mask[..., eos_id] = 0.0
+                next_token_log_probs = torch.where(mask, eos_mask, next_token_log_probs)
+
+            # Compute cumulative scores
+            cum_scores = scores.unsqueeze(-1) + next_token_log_probs  # (B, K, V)
+
+            # Flatten for beam selection
+            B, K, V = cum_scores.size()
+            flat_cum_scores = cum_scores.view(B, K * V)  # (B, K*V)
+
+            # Select top beam_width candidates
+            top_vals, top_indices = torch.topk(flat_cum_scores, k=beam_width, dim=-1)  # (B, K)
+            scores = top_vals  # updated scores
+
+            # Map indices back to beam and token ids
+            beam_indices = top_indices // V  # (B, K)
+            next_tokens = top_indices % V    # (B, K)
+
+            # Reorder sequences and finished flags based on selected beams
+            gather_index = beam_indices.unsqueeze(-1).expand(B, K, sequences.size(-1))  # (B, K, T_cur)
+            sequences = sequences.gather(dim=1, index=gather_index)  # (B, K, T_cur)
+            finished = finished.gather(dim=1, index=beam_indices)    # (B, K)
+
+            # Append next tokens
+            sequences = torch.cat([sequences, next_tokens.unsqueeze(-1)], dim=-1)  # (B, K, T_cur+1)
+
+            # Update finished flags
+            finished = finished | (next_tokens == eos_id)
+
+        # Final sort of beams by score in descending order
+        sorted_scores, sort_idx = scores.sort(dim=1, descending=True)
+        gather_index = sort_idx.unsqueeze(-1).expand(batch_size, beam_width, sequences.size(-1))
+        sequences = sequences.gather(dim=1, index=gather_index)
+
+        return sequences, sorted_scores
 
     def generate_sample(
             self,
