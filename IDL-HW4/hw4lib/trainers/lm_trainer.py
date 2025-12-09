@@ -153,7 +153,6 @@ class LMTrainer(BaseTrainer):
             'perplexity_char': avg_perplexity_char.item()
         }, attn_weights
 
-
     def _validate_epoch(self, dataloader):
         """
         Validate for one epoch.
@@ -224,7 +223,6 @@ class LMTrainer(BaseTrainer):
             'perplexity_char': avg_perplexity_char.item()
         }, attn_weights
 
-
     def train(self, train_dataloader, val_dataloader, epochs: int):
         """
         Full training loop for language model training.
@@ -287,7 +285,6 @@ class LMTrainer(BaseTrainer):
                 self.save_checkpoint('checkpoint-best-metric-model.pth')
 
             self.current_epoch += 1
-
 
     def evaluate(self, test_dataloader):
         """
